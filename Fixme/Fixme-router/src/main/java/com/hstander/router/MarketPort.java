@@ -43,7 +43,7 @@ public class MarketPort implements Runnable
 	}
 
 
-private class Attachment 
+private class Attachment
 {
 	int id = 500000;
 	AsynchronousServerSocketChannel server;
