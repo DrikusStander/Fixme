@@ -10,6 +10,9 @@ import java.nio.channels.CompletionHandler;
 import java.nio.charset.Charset;
 import java.util.concurrent.Future;
 
+//network and api calls
+import java.net.*;
+import java.io.DataOutputStream;
 
 /*
 
@@ -28,6 +31,44 @@ public class Main
 	int readCount = 0;
     public static void main( String[] args ) throws Exception
     {
+
+		// **********************************************
+		// HTTP request tests
+
+		URL url = new URL("https://www.alphavantage.co/query?function=GLOBAL_QUOTE");
+		HttpURLConnection con = (HttpURLConnection) url.openConnection();
+		con.setRequestProperty("Content-Type", "application/json");
+		con.setRequestMethod("GET");
+		con.setDoOutput(true);
+		DataOutputStream out = new DataOutputStream(con.getOutputStream());
+		StringBuilder result = new StringBuilder();
+		result.append("&");
+		result.append(URLEncoder.encode("symbol", "UTF-8"));
+		result.append("=");
+		result.append(URLEncoder.encode("BMW", "UTF-8"));
+		result.append("&");
+		result.append(URLEncoder.encode("apikey", "UTF-8"));
+		result.append("=");
+		result.append(URLEncoder.encode("GSA8L5WLCNAL7YFL", "UTF-8"));
+		out.writeBytes(result.toString());
+		out.flush();
+		out.close();
+
+		// System.out.println(con.getResponseCode());
+		BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream()));
+		String inputLine;
+		StringBuffer content = new StringBuffer();
+		while ((inputLine = in.readLine()) != null)
+		{
+			content.append(inputLine);
+		}
+		in.close();
+		con.disconnect();
+
+		System.out.println("Json Response: " + content);
+
+		// **********************************************
+/*
 		AsynchronousSocketChannel channel = AsynchronousSocketChannel.open();
 		SocketAddress serverAddr = new InetSocketAddress("localhost", 5001);
 		Future<Void> result = channel.connect(serverAddr);
@@ -70,18 +111,18 @@ public class Main
 			if(msg.length() > 0)
 			{
 				System.out.println(msg.length());
-				/*
+			 */ /*
 				 *	mandle message here
 				 *		- check if stock is available in this market
 				 *			^ check if if it is buy or sell
 				 *				+ check if the quantity of that stock item is available if buy
 				 *				+ reply with successful/unsucessful buy
 				 */
-				readWrite.writeToSoc(attach, "Market: " + msg);
+/*				readWrite.writeToSoc(attach, "Market: " + msg);
 			}
 			if (attach.mainThread.isInterrupted())
 				return;
-		}
+		}*/
 	}
 }
 
