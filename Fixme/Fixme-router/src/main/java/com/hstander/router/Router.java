@@ -196,16 +196,32 @@ public class Router //implements Runnable
 				{
 					/*
 					 *	Write to the Market here that was received from the broker
-					 *	at the moment just write the message back to the broker 
+					 *	at the moment just write the message back to the broker
 					 */
 					String[] parts = msg.split("\\|");
+
+					//******************************************
+
+					int marketID = Integer.parseInt(parts[0]);
+					int price = Integer.parseInt(parts[3]);
+					int checksum = Integer.parseInt(parts[6]);
+					int msglen = parts[0].length() + parts[1].length() + parts[2].length() + parts[3].length() + parts[4].length() + parts[5].length() + 5;
+					if (checksum - price == msglen)
+					{
+						this.writeToMarket(msg, marketID);
+					}
+
+					//******************************************
+
+
 					attachment.buffer.clear();
 					byte[] data = msg.getBytes(cs);
 					attachment.buffer.put(data);
 					attachment.buffer.flip();
 					attachment.isRead = false; // It is a write
+
 					System.out.println("------------> Reading from buff writing to socket");
-					attachment.client.write(attachment.buffer, attachment, this);
+					// attachment.client.write(attachment.buffer, attachment, this);
 					Router.clearBuffer(attachment);
 				}
 			}
@@ -229,6 +245,7 @@ public class Router //implements Runnable
 			market.buffer.put(data);
 			// market.isRead = false;
 			// market.client.write(market.buffer, market, market.marketRwHandler);
+			market.client.write(market.buffer);
 			return(1);
 		}
 

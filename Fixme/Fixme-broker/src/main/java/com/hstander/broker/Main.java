@@ -56,9 +56,9 @@ public class Main
 				/*
 				 * Handle id adressing here
 				*/
-				System.out.println(msg);
+				System.out.println(readWrite.handleMsg(msg, attach));
 			}
-			// readWrite.writeToSoc(attach);
+			readWrite.writeToSoc(attach);
 
 			if (attach.mainThread.isInterrupted())
 				return;
@@ -99,7 +99,7 @@ class ReadWrite
 
 	public void	writeToSoc(Attachment attach) throws Exception
 	{
-		String msg = getTextFromUser();
+		String msg = getTextFromUser(attach.id);
 		attach.buffer.clear();
 		Charset cs = Charset.forName("UTF-8");
 		byte[] data = msg.getBytes(cs);
@@ -113,16 +113,115 @@ class ReadWrite
 		}
 	}
 
-	private String getTextFromUser() throws Exception
+	public String handleMsg(String msg, Attachment attach)
+	{
+		String[] parts = msg.split("\\|");
+		if (parts[0].equalsIgnoreCase("ID"))
+		{
+			attach.id = Integer.parseInt(parts[1]);
+			return("Id updated");
+		}
+		else
+		{
+			return(msg);
+		}
+	}
+
+	private String getTextFromUser(int id) throws Exception
 	{
 		/*
-		 *	handle user input here and formati into FIX notation to send to market
+		 *	handle user input here and format into FIX notation to send to market
 		 */
-		System.out.println("Please enter a  message  (Bye  to quit):");
+		String marketId = this.getMarketIdFromUser();
+		String symbol = this.getSymbolFromUser();
+		String transaction = this.getTransactionFromUser();
+		String price = this.getPriceFromUser();
+		String qty = this.getQtyFromUser();
+		String msg = marketId + "|" + symbol + "|" + transaction + "|" + price + "|" + qty + "|" + Integer.toString(id);
+		int checksum = msg.length() + Integer.parseInt(price);
+		msg = msg + "|" + Integer.toString(checksum);
+		return msg;
+	}
+
+	private String getMarketIdFromUser() throws Exception
+	{
+		System.out.println("Please enter a market ID:");
 		BufferedReader consoleReader = new BufferedReader(new InputStreamReader(System.in));
 		String msg = consoleReader.readLine();
 		if (msg.length() == 0)
-			msg = this.getTextFromUser();
+			msg = this.getMarketIdFromUser();
+		return msg;
+	}
+
+	private String getSymbolFromUser() throws Exception
+	{
+		System.out.println("Please enter a Symbol:");
+		BufferedReader consoleReader = new BufferedReader(new InputStreamReader(System.in));
+		String msg = consoleReader.readLine();
+		if (msg.length() == 0)
+			msg = this.getSymbolFromUser();
+		return msg;
+	}
+
+	private String getTransactionFromUser() throws Exception
+	{
+		System.out.println("Please Select:\n1.Buy\n2.Sell");
+		BufferedReader consoleReader = new BufferedReader(new InputStreamReader(System.in));
+		String msg = consoleReader.readLine();
+		if (msg.length() == 0)
+			msg = this.getTransactionFromUser();
+		try
+		{
+			int option = Integer.parseInt(msg);
+			if (option < 1 && option > 2)
+			{
+				System.out.println("Invalid Option:");
+				msg = this.getTransactionFromUser();
+			}
+		}
+		catch(NumberFormatException exc)
+		{
+			System.out.println("Invalid Option:");
+			msg = this.getTransactionFromUser();
+		}
+		return msg;
+	}
+
+	private String getPriceFromUser() throws Exception
+	{
+		System.out.println("Please enter a Price:");
+		BufferedReader consoleReader = new BufferedReader(new InputStreamReader(System.in));
+		String msg = consoleReader.readLine();
+		if (msg.length() == 0)
+			msg = this.getPriceFromUser();
+		try
+		{
+			Integer.parseInt(msg);
+		}
+		catch(NumberFormatException exc)
+		{
+			System.out.println("Invalid Price:");
+			msg = this.getPriceFromUser();
+		}
+		return msg;
+	}
+
+	private String getQtyFromUser() throws Exception
+	{
+		System.out.println("Please enter a Quantity:");
+		BufferedReader consoleReader = new BufferedReader(new InputStreamReader(System.in));
+		String msg = consoleReader.readLine();
+		if (msg.length() == 0)
+			msg = this.getQtyFromUser();
+		try
+		{
+			Integer.parseInt(msg);
+		}
+		catch(NumberFormatException exc)
+		{
+			System.out.println("Invalid Quantity:");
+			msg = this.getQtyFromUser();
+		}
 		return msg;
 	}
 }
