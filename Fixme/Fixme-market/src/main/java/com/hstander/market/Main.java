@@ -32,34 +32,6 @@ public class Main
 	int readCount = 0;
     public static void main( String[] args ) throws Exception
     {
-
-		// **********************************************
-		// HTTP request tests
-		// String symbol = "BMW";
-		// URL url = new URL("https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=" + symbol + "&apikey=GSA8L5WLCNAL7YFL");
-		// HttpURLConnection con = (HttpURLConnection) url.openConnection();
-		// con.setRequestProperty("Content-Type", "application/json");
-		// con.setRequestMethod("GET");
-
-		// BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream()));
-		// String inputLine;
-		// StringBuffer content = new StringBuffer();
-		// while ((inputLine = in.readLine()) != null)
-		// {
-		// 	content.append(inputLine);
-		// }
-		// in.close();
-		// con.disconnect();
-
-		// System.out.println("Json Response: " + content);
-		// JSONObject obj = new JSONObject(content.toString());
-		// String price = obj.getJSONObject("Global Quote").getString("05. price");
-		// String volume = obj.getJSONObject("Global Quote").getString("06. volume");
-
-
-		// System.out.println("******** Price: " + price + " Volume: " + volume + " *************");
-		// **********************************************
-
 		AsynchronousSocketChannel channel = AsynchronousSocketChannel.open();
 		SocketAddress serverAddr = new InetSocketAddress("localhost", 5001);
 		Future<Void> result = channel.connect(serverAddr);
@@ -71,30 +43,7 @@ public class Main
 		attach.isRead = true;
 		attach.mainThread = Thread.currentThread();
 	
-		// Charset cs = Charset.forName("UTF-8");
-		// String msg = "Connection Request";
-		// byte[] data = msg.getBytes(cs);
-		// attach.buffer.put(data);
-		// attach.buffer.flip();
-	
-		// ReadWriteHandler readWriteHandler = new ReadWriteHandler();
 		ReadWrite readWrite = new ReadWrite();
-
-		// channel.write(attach.buffer, attach, readWriteHandler);
-		// channel.read(attach.buffer);
-		// Charset cs = Charset.forName("UTF-8");
-		// 	int limits = attach.buffer.limit();
-		// 	byte bytes[] = new byte[limits];
-		// String msg = new String(bytes, cs);
-		// String[] parts = msg.split("\\|");
-		// if (parts[0].equalsIgnoreCase("ID"))
-		// {
-		// 	attach.id = Integer.parseInt(parts[1]);
-		// 	System.out.println("MarketID = " + parts[1]);
-		// }
-		// channel.read(attach.buffer, attach, readWriteHandler);
-
-		// attach.mainThread.join();
 		String msg;
 		while(true)
 		{
@@ -109,9 +58,20 @@ public class Main
 				 *				+ check if the quantity of that stock item is available if buy
 				 *				+ reply with successful/unsucessful buy
 				 */
-				// readWrite.writeToSoc(attach, "Market: " + msg);
-				System.out.println(readWrite.handleMsg(msg, attach));
+			
+				String returnMsg = readWrite.handleMsg(msg, attach);
+				System.out.println("returnedMsgL: " + returnMsg);
+				if (!returnMsg.equalsIgnoreCase("Id updated"))
+				{
+					readWrite.writeToSoc(attach, returnMsg);
+					// byte[] data2 = new byte[attach.buffer.limit()];
+					// attach.buffer.get(data2, 0, attach.buffer.limit());
+					// String sss = new String(data2);
+					// System.out.println("buffer after write: " + sss);
+				}
+
 			}
+			// readWrite.handleMsg(msg, attach);
 			if (attach.mainThread.isInterrupted())
 				return;
 		}
@@ -136,6 +96,7 @@ public class Main
 			attach.buffer.get(bytes, 0, limits);
 			String msg = new String(bytes, cs);
 			clearBuffer(attach);
+			System.out.println("Read from socket: " + msg);
 			return(msg);
 		}
 
@@ -146,6 +107,7 @@ public class Main
 			Charset cs = Charset.forName("UTF-8");
 			byte[] data = msg.getBytes(cs);
 			attach.buffer.put(data);
+			attach.buffer.flip();
 		}
 
 		public String handleMsg(String msg, Attachment attach) throws Exception
@@ -158,41 +120,48 @@ public class Main
 			}
 			else
 			{
+				String returnMsg = parts[5] + "|" + attach.id + "|";
 				/*
 				 *	need to handle all parts of the passed string
 				 */
 				String symbolInfo = symbolInfo(parts[1]);
-				JSONObject obj = new JSONObject(msg);
+				JSONObject obj = new JSONObject(symbolInfo);
 				String symbolPrice = obj.getJSONObject("Global Quote").getString("05. price");
 				String symbolVolume = obj.getJSONObject("Global Quote").getString("06. volume");
 				if (parts[2].equalsIgnoreCase("buy"))
 				{
-					if (Integer.parseInt(parts[3]) >= Integer.parseInt(symbolPrice))
+					if (Double.parseDouble(parts[3]) >= Double.parseDouble(symbolPrice))
 					{
 						if (Integer.parseInt(parts[4]) <= Integer.parseInt(symbolVolume))
 						{
-							return("Buy Success");
+							returnMsg += "Buy Success";
 						}
 						else
-							return("Buy Failed: Insuffiecient Quantity available");
+						returnMsg += "Buy Failed: Insuffiecient Quantity available";
 					}
 					else
-						return("Buy Failed: Price to low");
+					returnMsg += "Buy Failed: Price to low";
 				}
 				else
 				{
-					if (Integer.parseInt(parts[3]) <= Integer.parseInt(symbolPrice))
+					if (Double.parseDouble(parts[3]) <= Double.parseDouble(symbolPrice))
 					{
-						return("Sell Success");
+						returnMsg += "Sell Success";
 					}
 					else
-						return("Sell Failed: Price to High");
+					returnMsg += "Sell Failed: Price to High";
 				}
+				int checksum = returnMsg.length() + 22;
+				returnMsg += "|" + Integer.toString(checksum);
+				// writeToSoc(attach, returnMsg);
+				return(returnMsg);
 			}
 		}
 
 		public void	writeToSoc(Attachment attach, String msg) throws Exception
 		{
+			System.out.println("in writeToSoc: msg: " + msg);
+			
 			attach.buffer.clear();
 			Charset cs = Charset.forName("UTF-8");
 			byte[] data = msg.getBytes(cs);
@@ -250,99 +219,72 @@ public class Main
 		boolean isRead;
 	}
 
-	class ReadWriteHandler implements CompletionHandler<Integer, Attachment> 
-	{
-		@Override
-		public void completed(Integer result, Attachment attach)
-		{
-			System.out.println("In ReadWriteHandler->completed");
-			if (result == -1)
-			{
-				System.out.format("Router unavailable, Shuting Down ...%n");
-				attach.mainThread.interrupt();
-				return;
-			}
-			if (attach.isRead)
-			{
-				attach.buffer.flip();
-				Charset cs = Charset.forName("UTF-8");
-				int limits = attach.buffer.limit();
-				byte bytes[] = new byte[limits];
-				attach.buffer.get(bytes, 0, limits);
-				String msg = new String(bytes, cs);
-				String[] parts = msg.split("\\|");
-				for (String temp : parts)
-					System.out.println("<--------- " + temp + " ------------->");
-				System.out.println("length = " + Integer.toString(parts.length));
-				System.out.println("Server Responded: " + msg);
-				
-				// if (parts[0].equalsIgnoreCase("") )
-				// msg = "";
-				// try 
-				// {
-				// 	msg = this.getTextFromUser();
-				// 	if (msg.equalsIgnoreCase("bye"))
-				// 	{
-				// 		attach.mainThread.interrupt();
-				// 		return;
-				// 	}
-				// }
-				// catch (Exception e)
-				// {
-				// 	e.printStackTrace();
-				// }
-				
-				// if (parts.length > 2)
-				// {
-				// 	System.out.println("parts > 2: length = " + Integer.toString(parts.length));
-				// 	System.out.println(msg);
-				// }
-				// if (parts[0].equalsIgnoreCase("ID"))
-				// {
-					// System.out.println("parts ==  2");
-					if (parts[0].equalsIgnoreCase("ID"))
-						attach.id = Integer.parseInt(parts[1]);
-					// 	msg = "Market: connected";
-					// attach.buffer.clear();
-					// byte[] data = msg.getBytes(cs);
-					// attach.buffer.put(data);
-					// attach.channel.read(attach.buffer, attach, this);
-				
-				// }
-				// else
-				// {
-					// System.out.println("parts ==  1" + parts[0]);
-					msg = "Market: ";
-					
-					attach.buffer.clear();
-					byte[] data = msg.getBytes(cs);
-					attach.buffer.put(data);
-					attach.buffer.flip();
-					attach.isRead = false; // It is a write
-					attach.channel.write(attach.buffer, attach, this);
-				// }
-			}
-			else
-			{
-				attach.isRead = true;
-				attach.buffer.clear();
-				attach.channel.read(attach.buffer, attach, this);
-			}
-		}
-		
-		@Override
-		public void failed(Throwable e, Attachment attach)
-		{
-			e.printStackTrace();
-		}
 
-		private String getTextFromUser() throws Exception
-		{
-			System.out.println("Please enter a  message  (Bye  to quit):");
-			BufferedReader consoleReader = new BufferedReader(new InputStreamReader(System.in));
-			String msg = consoleReader.readLine();
-			if (msg.length() == 0)
-				msg = this.getTextFromUser();
-			return msg;
-		}
-	}
+
+
+
+
+	// class ReadWriteHandler implements CompletionHandler<Integer, Attachment> 
+	// {
+	// 	@Override
+	// 	public void completed(Integer result, Attachment attach)
+	// 	{
+	// 		System.out.println("In ReadWriteHandler->completed");
+	// 		if (result == -1)
+	// 		{
+	// 			System.out.format("Router unavailable, Shuting Down ...%n");
+	// 			attach.mainThread.interrupt();
+	// 			return;
+	// 		}
+	// 		if (attach.isRead)
+	// 		{
+	// 			attach.buffer.flip();
+	// 			Charset cs = Charset.forName("UTF-8");
+	// 			int limits = attach.buffer.limit();
+	// 			byte bytes[] = new byte[limits];
+	// 			attach.buffer.get(bytes, 0, limits);
+	// 			String msg = new String(bytes, cs);
+	// 			String[] parts = msg.split("\\|");
+	// 			for (String temp : parts)
+	// 				System.out.println("<--------- " + temp + " ------------->");
+	// 			System.out.println("length = " + Integer.toString(parts.length));
+	// 			System.out.println("Server Responded: " + msg);
+				
+				
+	// 				if (parts[0].equalsIgnoreCase("ID"))
+	// 					attach.id = Integer.parseInt(parts[1]);
+		
+	// 				msg = "Market: ";
+					
+	// 				attach.buffer.clear();
+	// 				byte[] data = msg.getBytes(cs);
+	// 				attach.buffer.put(data);
+	// 				attach.buffer.flip();
+	// 				attach.isRead = false; // It is a write
+	// 				attach.channel.write(attach.buffer, attach, this);
+	// 			// }
+	// 		}
+	// 		else
+	// 		{
+	// 			attach.isRead = true;
+	// 			attach.buffer.clear();
+	// 			attach.channel.read(attach.buffer, attach, this);
+	// 		}
+	// 	}
+		
+	// 	@Override
+	// 	public void failed(Throwable e, Attachment attach)
+	// 	{
+	// 		e.printStackTrace();
+	// 	}
+
+	// 	private String getTextFromUser() throws Exception
+	// 	{
+	// 		System.out.println("Please enter a  message  (Bye  to quit):");
+	// 		BufferedReader consoleReader = new BufferedReader(new InputStreamReader(System.in));
+	// 		String msg = consoleReader.readLine();
+	// 		if (msg.length() == 0)
+	// 			msg = this.getTextFromUser();
+	// 		return msg;
+	// 	}
+	// }

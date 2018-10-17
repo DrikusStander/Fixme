@@ -9,6 +9,7 @@ import java.nio.ByteBuffer;
 import java.nio.channels.AsynchronousSocketChannel;
 import java.nio.channels.CompletionHandler;
 import java.nio.charset.Charset;
+import java.security.cert.PKIXRevocationChecker.Option;
 import java.util.concurrent.Future;
 
 
@@ -16,7 +17,7 @@ import java.util.concurrent.Future;
 
 Sender ID
 Buy/Sell
-Equaty
+Equaty / Symbol
 Price
 Amount
 Receiver
@@ -24,10 +25,6 @@ Checksum
 
 */
 
-/**
- * Hello world!
- *
- */
 public class Main 
 {
     public static void main( String[] args ) throws Exception
@@ -173,10 +170,17 @@ class ReadWrite
 		try
 		{
 			int option = Integer.parseInt(msg);
-			if (option < 1 && option > 2)
-			{
-				System.out.println("Invalid Option:");
-				msg = this.getTransactionFromUser();
+			switch (option){
+				case 1:
+					msg = "Buy";
+					break;
+				case 2:
+					msg = "Sell";
+					break;
+				default:
+					System.out.println("Invalid Option:");
+					msg = this.getTransactionFromUser();
+					break;
 			}
 		}
 		catch(NumberFormatException exc)
@@ -184,6 +188,7 @@ class ReadWrite
 			System.out.println("Invalid Option:");
 			msg = this.getTransactionFromUser();
 		}
+		
 		return msg;
 	}
 

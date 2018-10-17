@@ -112,6 +112,7 @@ public class Router //implements Runnable
 		Charset cs = Charset.forName("UTF-8");
 		byte[] data = msg.getBytes(cs);
 		attach.buffer.put(data);
+		// attach.buffer.flip();
 	}
 
 	private class BrokerConnectionHandler implements CompletionHandler<AsynchronousSocketChannel, Attachment>
@@ -163,8 +164,6 @@ public class Router //implements Runnable
 		@Override
 		public void completed(Integer result, Attachment attachment)
 		{
-			System.out.println("------------> In Completion Handler");
-
 			if (result == -1)
 			{
 				try 
@@ -178,16 +177,11 @@ public class Router //implements Runnable
 				}
 				return;
 			}
-			
 			if (attachment.isRead)
 			{
-				
-				System.out.println("------------> Read == " + attachment.isRead);
 				attachment.buffer.flip();
-				System.out.println("------------> Fliping the buff");
 				int limits = attachment.buffer.limit();
 				byte bytes[] = new byte[limits];
-				System.out.println("------------> Get data from the buff");
 				attachment.buffer.get(bytes, 0, limits);
 				Charset cs = Charset.forName("UTF-8");
 				String msg = new String(bytes, cs);
@@ -219,8 +213,6 @@ public class Router //implements Runnable
 					attachment.buffer.put(data);
 					attachment.buffer.flip();
 					attachment.isRead = false; // It is a write
-
-					System.out.println("------------> Reading from buff writing to socket");
 					// attachment.client.write(attachment.buffer, attachment, this);
 					Router.clearBuffer(attachment);
 				}
@@ -229,9 +221,7 @@ public class Router //implements Runnable
 			{
 				attachment.isRead = true;
 				attachment.buffer.clear();
-				System.out.println("------------> Reading from socket into buff");
 				attachment.client.read(attachment.buffer, attachment, this);
-				System.out.println("------------> Done Reading from socket into buff");
 			}
 		}
 
@@ -242,17 +232,14 @@ public class Router //implements Runnable
 			System.out.println("MarketID: " + Integer.toString(market.id));
 			Charset cs = Charset.forName("UTF-8");
 			byte[] data = msg.getBytes(cs);
+			market.buffer.clear();
 			market.buffer.put(data);
-			// market.isRead = false;
-			// market.client.write(market.buffer, market, market.marketRwHandler);
+			market.buffer.flip();
 			market.client.write(market.buffer);
 			return(1);
 		}
 
-		private int		writeToBroker()
-		{
-			return(1);
-		}
+		
 
 		@Override
 		public void failed(Throwable e, Attachment attachment)
@@ -277,7 +264,7 @@ public class Router //implements Runnable
 			newAttach.server = attachment.server;
 			newAttach.client = client;
 			newAttach.buffer = ByteBuffer.allocate(2048);
-			newAttach.isRead = true;
+			newAttach.isRead = false;
 			newAttach.clientAddr = clientAddr;
 			Charset cs = Charset.forName("UTF-8");
 			String msg = "ID|" + Integer.toString(newAttach.id);
@@ -332,17 +319,33 @@ private class MarketReadWriteHandler implements CompletionHandler<Integer, Attac
 			Charset cs = Charset.forName("UTF-8");
 			String msg = new String(bytes, cs);
 			System.out.format("Market at %s ID %s says: %s%n", attachment.clientAddr, attachment.id, msg);
-			if (msg.length() > 0)
-			{
+			// if (msg.length() > 0)
+			// {
+
+				String[] parts = msg.split("\\|");
+
+				//******************************************
+
+
+				int brokerID = Integer.parseInt(parts[0]);
+				int checksum = Integer.parseInt(parts[3]);
+				int msglen = parts[0].length() + parts[1].length() + parts[2].length() + 2;
+				if (checksum - 22 == msglen)
+				{
+					this.writeToBroker(msg, brokerID);
+				}
+
+				//******************************************
+
 				System.out.println("-----------------------------> " + msg.length());
 				attachment.buffer.clear();
 				byte[] data = msg.getBytes(cs);
 				attachment.buffer.put(data);
 				attachment.buffer.flip();
 				attachment.isRead = false;
-				attachment.client.write(attachment.buffer, attachment, this);
+				// attachment.client.write(attachment.buffer, attachment, this);
 				Router.clearBuffer(attachment);
-			}
+			// }
 		}
 		else 
 		{
@@ -357,6 +360,20 @@ private class MarketReadWriteHandler implements CompletionHandler<Integer, Attac
 	public void failed(Throwable e, Attachment attachment)
 	{
 		e.printStackTrace();
+	}
+
+	private int		writeToBroker(String msg, int brokerID)
+	{
+		System.out.println("BrokerID: " +  Integer.toString(brokerID));
+		Attachment broker = brokers.get(brokerID);
+		System.out.println("MarketID: " + Integer.toString(broker.id));
+		Charset cs = Charset.forName("UTF-8");
+		byte[] data = msg.getBytes(cs);
+		broker.buffer.clear();
+		broker.buffer.put(data);
+		broker.buffer.flip();
+		broker.client.write(broker.buffer);
+		return(1);
 	}
 }
 }
