@@ -38,7 +38,6 @@ public class Router //implements Runnable
 
 			//Market Server setup
 			marketServer = AsynchronousServerSocketChannel.open();
-			// String host = "localhost";
 			int marketPort = 5001;
 			InetSocketAddress marketAddr = new InetSocketAddress(host, marketPort);
 			marketServer.bind(marketAddr);
@@ -60,7 +59,6 @@ public class Router //implements Runnable
 			attachment.id = _id;
 			attachment.server = brokerServer;
 			brokerServer.accept(attachment, new BrokerConnectionHandler());
-			// Thread.currentThread().join();
 		}
 		catch(Exception e)
 		{
@@ -70,14 +68,12 @@ public class Router //implements Runnable
 
 	private void runMarket()
 	{
-		System.out.println("runMarket()");
 		try
 		{
 			Attachment attachment = new Attachment();
 			attachment.id = _id;
 			attachment.server = marketServer;
 			marketServer.accept(attachment, new MarketConnectionHandler());
-			// Thread.currentThread().join();
 		}
 		catch(Exception e)
 		{
@@ -102,7 +98,6 @@ public class Router //implements Runnable
 		boolean isRead;
 		BrokerReadWriteHandler brokerRwHandler;
 		MarketReadWriteHandler marketRwHandler;
-
 	}
 
 	public static void clearBuffer(Attachment attach)
@@ -112,8 +107,66 @@ public class Router //implements Runnable
 		Charset cs = Charset.forName("UTF-8");
 		byte[] data = msg.getBytes(cs);
 		attach.buffer.put(data);
-		// attach.buffer.flip();
 	}
+
+
+	public int		writeToMarket(String msg, int marketID)
+		{
+			try
+			{
+				Attachment market = markets.get(marketID);
+				Charset cs = Charset.forName("UTF-8");
+				byte[] data = msg.getBytes(cs);
+				market.buffer.clear();
+				market.buffer.put(data);
+				market.buffer.flip();
+				market.client.write(market.buffer);
+				clearBuffer(market);
+				market.isRead = true;
+				try
+				{
+					market.client.read(market.buffer, market, market.marketRwHandler);
+				}
+				catch(ReadPendingException e)
+				{
+					
+				}
+			}
+			catch(NullPointerException e)
+			{
+				return(0);
+			}
+			return(1);
+		}
+
+		public int		writeToBroker(String msg, int brokerID)
+		{
+			try
+			{
+				Attachment broker = brokers.get(brokerID);
+				Charset cs = Charset.forName("UTF-8");
+				byte[] data = msg.getBytes(cs);
+				broker.buffer.clear();
+				broker.buffer.put(data);
+				broker.buffer.flip();
+				broker.client.write(broker.buffer);
+				clearBuffer(broker);
+				broker.isRead = true;
+				try
+				{
+					broker.client.read(broker.buffer, broker, broker.brokerRwHandler);
+				}
+				catch(ReadPendingException e)
+				{
+					System.out.println("readPending");
+				}
+			}
+			catch(NullPointerException e)
+			{
+				return(0);
+			}
+			return(1);
+		}
 
 	private class BrokerConnectionHandler implements CompletionHandler<AsynchronousSocketChannel, Attachment>
 	{
@@ -139,7 +192,6 @@ public class Router //implements Runnable
 				byte[] data = msg.getBytes(cs);
 				newAttach.buffer.put(data);
 				newAttach.buffer.flip();
-				// attachment.isRead = false; // It is a write
 				brokers.put(newAttach.id, newAttach);
 				newAttach.client.write(newAttach.buffer);
 				Router.clearBuffer(newAttach);
@@ -186,34 +238,27 @@ public class Router //implements Runnable
 				Charset cs = Charset.forName("UTF-8");
 				String msg = new String(bytes, cs);
 				System.out.format("Broker at %s ID %s says: %s%n", attachment.clientAddr, attachment.id, msg);
-				if (msg.length() > 0)
+				String[] parts = msg.split("\\|");
+				if (parts.length == 7)
 				{
-					/*
-					 *	Write to the Market here that was received from the broker
-					 *	at the moment just write the message back to the broker
-					 */
-					String[] parts = msg.split("\\|");
-
-					//******************************************
-
 					int marketID = Integer.parseInt(parts[0]);
 					int price = Integer.parseInt(parts[3]);
 					int checksum = Integer.parseInt(parts[6]);
 					int msglen = parts[0].length() + parts[1].length() + parts[2].length() + parts[3].length() + parts[4].length() + parts[5].length() + 5;
 					if (checksum - price == msglen)
 					{
-						this.writeToMarket(msg, marketID);
+						if (writeToMarket(msg, marketID) == 0)
+						{
+							String newMsg = "Market: " + parts[0] + " Does not exist";
+							writeToBroker(newMsg, Integer.parseInt(parts[5]));
+							return;
+						}
 					}
-
-					//******************************************
-
-
 					attachment.buffer.clear();
 					byte[] data = msg.getBytes(cs);
 					attachment.buffer.put(data);
 					attachment.buffer.flip();
 					attachment.isRead = false; // It is a write
-					// attachment.client.write(attachment.buffer, attachment, this);
 					Router.clearBuffer(attachment);
 				}
 			}
@@ -225,19 +270,7 @@ public class Router //implements Runnable
 			}
 		}
 
-		private int		writeToMarket(String msg, int marketID)
-		{
-			System.out.println("MarketID: " +  Integer.toString(marketID));
-			Attachment market = markets.get(marketID);
-			System.out.println("MarketID: " + Integer.toString(market.id));
-			Charset cs = Charset.forName("UTF-8");
-			byte[] data = msg.getBytes(cs);
-			market.buffer.clear();
-			market.buffer.put(data);
-			market.buffer.flip();
-			market.client.write(market.buffer);
-			return(1);
-		}
+		
 
 		
 
@@ -319,37 +352,30 @@ private class MarketReadWriteHandler implements CompletionHandler<Integer, Attac
 			Charset cs = Charset.forName("UTF-8");
 			String msg = new String(bytes, cs);
 			System.out.format("Market at %s ID %s says: %s%n", attachment.clientAddr, attachment.id, msg);
-			// if (msg.length() > 0)
-			// {
-
-				String[] parts = msg.split("\\|");
-
-				//******************************************
-
-
+			String[] parts = msg.split("\\|");
+			if (parts.length == 4)
+			{
 				int brokerID = Integer.parseInt(parts[0]);
 				int checksum = Integer.parseInt(parts[3]);
 				int msglen = parts[0].length() + parts[1].length() + parts[2].length() + 2;
 				if (checksum - 22 == msglen)
 				{
-					this.writeToBroker(msg, brokerID);
+					if (writeToBroker(msg, brokerID) == 0)
+					{
+						String newMsg = "Broker: " + parts[0] + " Does not exist";
+						writeToMarket(newMsg, Integer.parseInt(parts[1]));
+					}
 				}
-
-				//******************************************
-
-				System.out.println("-----------------------------> " + msg.length());
 				attachment.buffer.clear();
 				byte[] data = msg.getBytes(cs);
 				attachment.buffer.put(data);
 				attachment.buffer.flip();
 				attachment.isRead = false;
-				// attachment.client.write(attachment.buffer, attachment, this);
 				Router.clearBuffer(attachment);
-			// }
+			}
 		}
 		else 
 		{
-			System.out.println("-----------------------------> reading");
 			attachment.isRead = true;
 			attachment.buffer.clear();
 			attachment.client.read(attachment.buffer, attachment, this);
@@ -362,18 +388,6 @@ private class MarketReadWriteHandler implements CompletionHandler<Integer, Attac
 		e.printStackTrace();
 	}
 
-	private int		writeToBroker(String msg, int brokerID)
-	{
-		System.out.println("BrokerID: " +  Integer.toString(brokerID));
-		Attachment broker = brokers.get(brokerID);
-		System.out.println("MarketID: " + Integer.toString(broker.id));
-		Charset cs = Charset.forName("UTF-8");
-		byte[] data = msg.getBytes(cs);
-		broker.buffer.clear();
-		broker.buffer.put(data);
-		broker.buffer.flip();
-		broker.client.write(broker.buffer);
-		return(1);
-	}
+	
 }
 }
